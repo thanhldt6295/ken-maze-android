@@ -1,0 +1,14 @@
+* text=auto
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+android/gradlew text eol=lf
+*.bat text eol=crlf
+
+*.mp3 binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.aab binary
+*.apk binary
