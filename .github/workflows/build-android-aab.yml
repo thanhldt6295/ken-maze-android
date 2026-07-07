@@ -1,0 +1,81 @@
+name: Build Android AAB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync web game to Android
+        run: pnpm exec cap sync android
+
+      - name: Make Gradle executable
+        run: chmod +x android/gradlew
+
+      - name: Prepare upload key signing
+        shell: bash
+        env:
+          KEN_MAZE_KEYSTORE_BASE64: ${{ secrets.KEN_MAZE_KEYSTORE_BASE64 }}
+          KEN_MAZE_KEYSTORE_PASSWORD: ${{ secrets.KEN_MAZE_KEYSTORE_PASSWORD }}
+          KEN_MAZE_KEY_ALIAS: ${{ secrets.KEN_MAZE_KEY_ALIAS }}
+          KEN_MAZE_KEY_PASSWORD: ${{ secrets.KEN_MAZE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${KEN_MAZE_KEYSTORE_BASE64:-}" ]; then
+            echo "No KEN_MAZE_KEYSTORE_BASE64 secret found. Building unsigned release AAB."
+            exit 0
+          fi
+
+          if [ -z "${KEN_MAZE_KEYSTORE_PASSWORD:-}" ] || [ -z "${KEN_MAZE_KEY_ALIAS:-}" ] || [ -z "${KEN_MAZE_KEY_PASSWORD:-}" ]; then
+            echo "Signing secrets are incomplete. Add all 4 KEN_MAZE_* secrets."
+            exit 1
+          fi
+
+          printf '%s' "$KEN_MAZE_KEYSTORE_BASE64" | base64 --decode > android/app/ken-maze-upload-key.jks
+          {
+            echo "storeFile=app/ken-maze-upload-key.jks"
+            echo "storePassword=$KEN_MAZE_KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEN_MAZE_KEY_ALIAS"
+            echo "keyPassword=$KEN_MAZE_KEY_PASSWORD"
+          } > android/key.properties
+
+      - name: Build release AAB
+        run: cd android && ./gradlew bundleRelease
+
+      - name: Upload release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: ken-maze-release-aab
+          path: android/app/build/outputs/bundle/release/*.aab
