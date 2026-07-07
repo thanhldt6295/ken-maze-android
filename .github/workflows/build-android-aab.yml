@@ -34,6 +34,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -41,7 +46,9 @@ jobs:
         run: pnpm exec cap sync android
 
       - name: Make Gradle executable
-        run: chmod +x android/gradlew
+        run: |
+          sed -i 's/\r$//' android/gradlew
+          chmod +x android/gradlew
 
       - name: Prepare upload key signing
         shell: bash
