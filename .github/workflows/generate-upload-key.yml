@@ -1,0 +1,74 @@
+name: Generate Upload Key
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-upload-key:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Generate upload key
+        shell: bash
+        env:
+          KEN_MAZE_KEYSTORE_PASSWORD: ${{ secrets.KEN_MAZE_KEYSTORE_PASSWORD }}
+          KEN_MAZE_KEY_ALIAS: ${{ secrets.KEN_MAZE_KEY_ALIAS }}
+          KEN_MAZE_KEY_PASSWORD: ${{ secrets.KEN_MAZE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${KEN_MAZE_KEYSTORE_PASSWORD:-}" ] || [ -z "${KEN_MAZE_KEY_ALIAS:-}" ] || [ -z "${KEN_MAZE_KEY_PASSWORD:-}" ]; then
+            echo "Before running this workflow, add these 3 secrets:"
+            echo "KEN_MAZE_KEYSTORE_PASSWORD"
+            echo "KEN_MAZE_KEY_ALIAS"
+            echo "KEN_MAZE_KEY_PASSWORD"
+            exit 1
+          fi
+
+          echo "::add-mask::$KEN_MAZE_KEYSTORE_PASSWORD"
+          echo "::add-mask::$KEN_MAZE_KEY_PASSWORD"
+
+          mkdir -p upload-key-output
+
+          keytool -genkeypair \
+            -v \
+            -keystore upload-key-output/ken-maze-upload-key.jks \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -alias "$KEN_MAZE_KEY_ALIAS" \
+            -storepass "$KEN_MAZE_KEYSTORE_PASSWORD" \
+            -keypass "$KEN_MAZE_KEY_PASSWORD" \
+            -dname "CN=Ken Maze, OU=Games, O=Ken Maze, L=Ho Chi Minh, S=Ho Chi Minh, C=VN"
+
+          base64 -w 0 upload-key-output/ken-maze-upload-key.jks > upload-key-output/KEN_MAZE_KEYSTORE_BASE64.txt
+
+          cat > upload-key-output/README.txt <<EOF
+          Keep these files private.
+
+          1. Save ken-maze-upload-key.jks somewhere safe.
+          2. Open KEN_MAZE_KEYSTORE_BASE64.txt.
+          3. Copy all text into GitHub Secret KEN_MAZE_KEYSTORE_BASE64.
+          4. Run workflow Build Android AAB again.
+
+          The other 3 secrets should already exist:
+          KEN_MAZE_KEYSTORE_PASSWORD
+          KEN_MAZE_KEY_ALIAS
+          KEN_MAZE_KEY_PASSWORD
+          EOF
+
+      - name: Upload private upload key artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ken-maze-upload-key-private-keep-safe
+          path: upload-key-output/
+          retention-days: 1
