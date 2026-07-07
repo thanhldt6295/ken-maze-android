@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6f2e8" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Ken Maze Shrimp</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app" aria-label="Ken Maze Shrimp">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Ken Maze</span>
+        </div>
+
+        <div class="stats" aria-label="Trạng thái màn chơi">
+          <div class="stat">
+            <span>Màn</span>
+            <strong id="levelText">1</strong>
+          </div>
+          <div class="stat">
+            <span>Giờ</span>
+            <strong id="timeText">1:30</strong>
+          </div>
+          <div class="stat">
+            <span>Bước</span>
+            <strong id="movesText">60</strong>
+          </div>
+        </div>
+
+        <div class="top-actions">
+          <button class="icon-button sound-button" id="soundButton" type="button" aria-label="Bật tắt âm thanh" aria-pressed="true">
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+              <path class="sound-speaker" d="M4 9.5h4l5-4v13l-5-4H4z"></path>
+              <path class="sound-wave" d="M16 8.5c1.2 1 1.9 2.2 1.9 3.5S17.2 14.5 16 15.5"></path>
+              <path class="sound-wave sound-wave-outer" d="M18.4 5.8c2 1.7 3.1 3.8 3.1 6.2s-1.1 4.5-3.1 6.2"></path>
+              <path class="sound-off-line" d="M5 5l14 14"></path>
+            </svg>
+          </button>
+          <button class="icon-button reset-button" id="restartButton" type="button" aria-label="Chơi lại màn này">
+            <svg class="icon-svg reset-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path class="reset-shape" d="M17.6 6.4A7.9 7.9 0 0 0 12 4a8 8 0 1 0 7.7 10h-2.1A6 6 0 1 1 16.2 7.8L13 11h7V4z"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="board-shell" aria-label="Mê cung của Ken">
+        <canvas id="gameCanvas" aria-label="Ken tìm đường tới tôm" role="img"></canvas>
+
+        <div class="toast" id="toast" hidden>
+          <span class="toast-spark" aria-hidden="true"></span>
+          <span id="toastText">Tường đã đổ</span>
+        </div>
+
+        <div class="level-modal" id="levelModal" hidden>
+          <div class="modal-panel">
+            <span class="modal-ken" aria-hidden="true">
+              <span class="modal-ken-ear modal-ken-ear-left"></span>
+              <span class="modal-ken-ear modal-ken-ear-right"></span>
+              <span class="modal-ken-stripes"></span>
+              <span class="modal-ken-eye modal-ken-eye-left"></span>
+              <span class="modal-ken-eye modal-ken-eye-right"></span>
+              <span class="modal-ken-nose"></span>
+              <span class="modal-ken-tongue"></span>
+              <span class="modal-ken-whiskers"></span>
+            </span>
+            <h1 id="modalTitle">Ken đã ăn tôm</h1>
+            <p id="resultText">Màn 1 hoàn tất sau 0 bước.</p>
+            <button id="nextButton" type="button">Màn tiếp theo</button>
+          </div>
+        </div>
+
+        <div class="ad-modal" id="adModal" hidden>
+          <div class="modal-panel ad-panel">
+            <span class="ad-icon hammer-large" id="adIcon" aria-hidden="true"></span>
+            <h1 id="adTitle">Nhận búa</h1>
+            <p id="adText">Xem quảng cáo ngắn để nhận 1 búa phá tường.</p>
+            <div class="ad-progress" aria-hidden="true"><span id="adProgress"></span></div>
+            <button id="adButton" type="button" disabled>Đang xem...</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="actionbar" aria-label="Công cụ">
+        <button class="hammer-button" id="hammerButton" type="button" aria-pressed="false">
+          <span class="hammer-icon" aria-hidden="true"></span>
+          <span id="hammerText">Xem quảng cáo nhận búa</span>
+        </button>
+        <button class="step-button" id="stepButton" type="button">
+          <span class="step-icon" aria-hidden="true">+10</span>
+          <span id="stepText">Xem quảng cáo thêm bước</span>
+        </button>
+      </section>
+    </main>
+
+    <script src="./game.js"></script>
+  </body>
+</html>

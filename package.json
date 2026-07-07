@@ -1,0 +1,20 @@
+{
+  "name": "ken-maze-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ken Maze mobile game packaged with Capacitor for Android APK/AAB builds.",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "sync": "cap sync android",
+    "open:android": "cap open android",
+    "build:apk": "cd android && ./gradlew assembleDebug",
+    "build:aab": "cd android && ./gradlew bundleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  }
+}

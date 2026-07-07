@@ -1,0 +1,11 @@
+{
+  "appId": "com.linh0.kenmaze",
+  "appName": "Ken Maze",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#fffaf0"
+  }
+}

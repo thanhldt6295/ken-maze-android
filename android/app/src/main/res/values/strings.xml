@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ken Maze</string>
+    <string name="title_activity_main">Ken Maze</string>
+    <string name="package_name">com.linh0.kenmaze</string>
+    <string name="custom_url_scheme">com.linh0.kenmaze</string>
+</resources>
