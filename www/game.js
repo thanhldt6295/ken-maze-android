@@ -547,9 +547,8 @@
     stepButton.hidden = true;
     stepButton.style.display = "none";
     if (actionbar) {
-      const hasVisibleAction = showHammerButton;
-      actionbar.hidden = !hasVisibleAction;
-      actionbar.style.display = hasVisibleAction ? "grid" : "none";
+      actionbar.hidden = false;
+      actionbar.style.display = "grid";
       actionbar.style.gridTemplateColumns = "minmax(0, 1fr)";
     }
     hammerButton.setAttribute("aria-pressed", state.hammerMode ? "true" : "false");
@@ -702,8 +701,8 @@
   function cellCenter(cell) {
     const layout = state.layout;
     return {
-      x: layout.x + (cell.x + 0.5) * layout.cell,
-      y: layout.y + (cell.y + 0.5) * layout.cell,
+      x: layout.x + (cell.x + 0.5) * layout.cellWidth,
+      y: layout.y + (cell.y + 0.5) * layout.cellHeight,
     };
   }
 
@@ -1027,8 +1026,8 @@
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left - state.layout.x;
     const y = clientY - rect.top - state.layout.y;
-    const cellX = Math.floor(x / state.layout.cell);
-    const cellY = Math.floor(y / state.layout.cell);
+    const cellX = Math.floor(x / state.layout.cellWidth);
+    const cellY = Math.floor(y / state.layout.cellHeight);
     if (!inBounds(state.maze, cellX, cellY)) return null;
     return { x: cellX, y: cellY };
   }
@@ -1069,17 +1068,22 @@
 
   function updateLayout(width, height) {
     if (!state.maze) return;
-    const padding = Math.max(12, Math.min(width, height) * 0.032);
-    const cell = Math.floor(Math.min((width - padding * 2) / state.maze.cols, (height - padding * 2) / state.maze.rows));
-    const mazeWidth = cell * state.maze.cols;
-    const mazeHeight = cell * state.maze.rows;
+    const edgeInset = Math.max(3, Math.min(width, height) * 0.006);
+    const mazeWidth = Math.max(1, width - edgeInset * 2);
+    const mazeHeight = Math.max(1, height - edgeInset * 2);
+    const cellWidth = mazeWidth / state.maze.cols;
+    const cellHeight = mazeHeight / state.maze.rows;
+    const cell = Math.max(1, Math.min(cellWidth, cellHeight));
 
     state.layout = {
-      x: Math.floor((width - mazeWidth) / 2),
-      y: Math.floor((height - mazeHeight) / 2),
+      x: edgeInset,
+      y: edgeInset,
       width: mazeWidth,
       height: mazeHeight,
       cell,
+      cellWidth,
+      cellHeight,
+      edgeInset,
     };
   }
 
@@ -1102,27 +1106,25 @@
     const layout = state.layout;
     const maze = state.maze;
     const cell = layout.cell;
-
-    roundedRect(ctx, layout.x - 8, layout.y - 8, layout.width + 16, layout.height + 16, 8);
-    ctx.fillStyle = "#f9f4e5";
-    ctx.fill();
+    const cellWidth = layout.cellWidth;
+    const cellHeight = layout.cellHeight;
 
     ctx.save();
     ctx.beginPath();
-    roundedRect(ctx, layout.x, layout.y, layout.width, layout.height, 5);
+    ctx.rect(layout.x - layout.edgeInset, layout.y - layout.edgeInset, layout.width + layout.edgeInset * 2, layout.height + layout.edgeInset * 2);
     ctx.clip();
 
-    ctx.fillStyle = "#f7f1df";
+    ctx.fillStyle = "#fbf8f1";
     ctx.fillRect(layout.x, layout.y, layout.width, layout.height);
 
-    ctx.globalAlpha = 0.24;
-    ctx.fillStyle = "#d8c59c";
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = "#d7cab1";
     const dot = Math.max(1.1, cell * 0.055);
     for (let y = 0; y < maze.rows; y += 1) {
       for (let x = 0; x < maze.cols; x += 1) {
         if ((x + y) % 2 === 0) {
           ctx.beginPath();
-          ctx.arc(layout.x + (x + 0.5) * cell, layout.y + (y + 0.5) * cell, dot, 0, Math.PI * 2);
+          ctx.arc(layout.x + (x + 0.5) * cellWidth, layout.y + (y + 0.5) * cellHeight, dot, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -1137,24 +1139,24 @@
 
     ctx.beginPath();
     for (const mazeCell of maze.cells) {
-      const x = layout.x + mazeCell.x * cell;
-      const y = layout.y + mazeCell.y * cell;
+      const x = layout.x + mazeCell.x * cellWidth;
+      const y = layout.y + mazeCell.y * cellHeight;
 
       if (mazeCell.walls & DIRS.up.bit) {
         ctx.moveTo(x, y);
-        ctx.lineTo(x + cell, y);
+        ctx.lineTo(x + cellWidth, y);
       }
       if (mazeCell.walls & DIRS.left.bit) {
         ctx.moveTo(x, y);
-        ctx.lineTo(x, y + cell);
+        ctx.lineTo(x, y + cellHeight);
       }
       if (mazeCell.x === maze.cols - 1 && mazeCell.walls & DIRS.right.bit) {
-        ctx.moveTo(x + cell, y);
-        ctx.lineTo(x + cell, y + cell);
+        ctx.moveTo(x + cellWidth, y);
+        ctx.lineTo(x + cellWidth, y + cellHeight);
       }
       if (mazeCell.y === maze.rows - 1 && mazeCell.walls & DIRS.down.bit) {
-        ctx.moveTo(x, y + cell);
-        ctx.lineTo(x + cell, y + cell);
+        ctx.moveTo(x, y + cellHeight);
+        ctx.lineTo(x + cellWidth, y + cellHeight);
       }
     }
     ctx.stroke();
@@ -1197,7 +1199,13 @@
       if (!inBounds(state.maze, state.player.x + dir.dx, state.player.y + dir.dy)) continue;
       if (!hasWall(state.maze, state.player.x, state.player.y, dir)) continue;
       ctx.beginPath();
-      ctx.arc(center.x + dir.dx * state.layout.cell * 0.5, center.y + dir.dy * state.layout.cell * 0.5, state.layout.cell * 0.15, 0, Math.PI * 2);
+      ctx.arc(
+        center.x + dir.dx * state.layout.cellWidth * 0.5,
+        center.y + dir.dy * state.layout.cellHeight * 0.5,
+        state.layout.cell * 0.15,
+        0,
+        Math.PI * 2,
+      );
       ctx.stroke();
     }
     ctx.restore();
@@ -1359,8 +1367,8 @@
     const layout = state.layout;
     const cell = layout.cell;
     const center = {
-      x: layout.x + (state.player.px + 0.5) * cell,
-      y: layout.y + (state.player.py + 0.5) * cell,
+      x: layout.x + (state.player.px + 0.5) * layout.cellWidth,
+      y: layout.y + (state.player.py + 0.5) * layout.cellHeight,
     };
     const r = cell * 0.31;
     const breathing = Math.sin(now / 190) * cell * 0.012;
@@ -1456,6 +1464,8 @@
     resizeCanvas();
     const rect = canvas.getBoundingClientRect();
     ctx.clearRect(0, 0, rect.width, rect.height);
+    ctx.fillStyle = "#fbf8f1";
+    ctx.fillRect(0, 0, rect.width, rect.height);
 
     if (!state.layout) return;
     drawMaze(now);
