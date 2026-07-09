@@ -10,6 +10,7 @@
   const hammerButton = document.querySelector("#hammerButton");
   const stepText = document.querySelector("#stepText");
   const stepButton = document.querySelector("#stepButton");
+  const actionbar = document.querySelector(".actionbar");
   const soundButton = document.querySelector("#soundButton");
   const restartButton = document.querySelector("#restartButton");
   const nextButton = document.querySelector("#nextButton");
@@ -29,10 +30,12 @@
   const victorySound = new Audio("./assets/audio/win.mp3");
 
   const TIME_LIMIT_SECONDS = 90;
-  const STEPS_PER_LEVEL = 60;
+  const STEPS_PER_LEVEL = 26;
   const FOOD_STEP_BONUS = 1;
   const AD_STEP_REWARD = 10;
   const AD_DURATION = 3000;
+  const HAMMER_FIRST_LEVEL = 6;
+  const HAMMER_REWARD_INTERVAL = 6;
   const STORAGE_KEY = "kenMazeShrimp.highestLevel";
 
   const DIRS = {
@@ -79,13 +82,106 @@
     modalMode: "next",
     pointerStart: null,
     ad: null,
+    claimedHammerTiers: new Set(),
+    usedStepRewardThisLevel: false,
   };
 
   backgroundMusic.loop = true;
   backgroundMusic.preload = "auto";
-  backgroundMusic.volume = 0.36;
+  backgroundMusic.volume = 0.1;
   victorySound.preload = "auto";
   victorySound.volume = 0.82;
+  backgroundMusic.load();
+  victorySound.load();
+
+  let sfxContext = null;
+
+  function getSfxContext() {
+    if (!state.soundEnabled) return null;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!sfxContext) sfxContext = new AudioContextClass();
+    if (sfxContext.state === "suspended") {
+      sfxContext.resume().catch(() => {});
+    }
+    return sfxContext;
+  }
+
+  function playTone(ctx, start, duration, frequency, endFrequency, volume, type = "sine") {
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    if (endFrequency) {
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), start + duration);
+    }
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.04);
+  }
+
+  function playNoise(ctx, start, duration, volume, filterType = "lowpass", frequency = 600) {
+    const length = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i += 1) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / length);
+    }
+
+    const source = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    source.buffer = buffer;
+    filter.type = filterType;
+    filter.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    source.start(start);
+    source.stop(start + duration);
+  }
+
+  function playEffect(kind) {
+    const ctx = getSfxContext();
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.01;
+
+    if (kind === "food") {
+      playTone(ctx, t, 0.11, 760, 1160, 0.16, "sine");
+      playTone(ctx, t + 0.07, 0.13, 1180, 1720, 0.14, "triangle");
+      playTone(ctx, t + 0.16, 0.1, 1620, 2140, 0.09, "sine");
+      return;
+    }
+
+    if (kind === "shrimp") {
+      playTone(ctx, t, 0.12, 523.25, 659.25, 0.08, "triangle");
+      playTone(ctx, t + 0.1, 0.14, 659.25, 783.99, 0.075, "triangle");
+      playTone(ctx, t + 0.22, 0.2, 880, 1174.66, 0.07, "sine");
+      playTone(ctx, t + 0.36, 0.22, 1318.51, 1567.98, 0.055, "sine");
+      return;
+    }
+
+    if (kind === "hammer") {
+      playTone(ctx, t, 0.18, 135, 48, 0.22, "sawtooth");
+      playNoise(ctx, t, 0.2, 0.18, "lowpass", 280);
+      playNoise(ctx, t + 0.03, 0.08, 0.13, "highpass", 1100);
+      return;
+    }
+
+    if (kind === "water") {
+      playNoise(ctx, t, 0.5, 0.16, "bandpass", 820);
+      playNoise(ctx, t + 0.08, 0.34, 0.12, "highpass", 1450);
+      playTone(ctx, t, 0.46, 560, 130, 0.13, "triangle");
+      playTone(ctx, t + 0.14, 0.36, 330, 82, 0.09, "sawtooth");
+    }
+  }
 
   function setSoundEnabled(enabled) {
     state.soundEnabled = enabled;
@@ -93,9 +189,13 @@
     if (!enabled) {
       backgroundMusic.pause();
       victorySound.pause();
+      if (sfxContext && sfxContext.state === "running") {
+        sfxContext.suspend().catch(() => {});
+      }
       state.audioStarted = false;
       return;
     }
+    getSfxContext();
     startBackgroundMusic();
   }
 
@@ -113,12 +213,18 @@
 
   function playVictorySound() {
     if (!state.soundEnabled) return;
+    playEffect("shrimp");
     victorySound.currentTime = 0;
     victorySound.play().catch(() => {});
   }
 
   function primeAudio() {
-    if (state.soundEnabled) startBackgroundMusic();
+    if (!state.soundEnabled) return;
+    getSfxContext();
+    if (backgroundMusic.readyState < 2) {
+      backgroundMusic.load();
+    }
+    startBackgroundMusic();
   }
 
   function randomInt(max) {
@@ -373,13 +479,14 @@
 
   function startLevel(level) {
     const now = performance.now();
+    const carriedMoves = state.won && level === state.level + 1 ? Math.max(0, state.moves) : 0;
     const maze = generateMaze(level);
     const player = { x: 0, y: 0, px: 0, py: 0 };
     const goal = farthestCell(maze, player);
     const foods = makeFoods(maze, player, goal, level);
 
     state.level = level;
-    state.moves = STEPS_PER_LEVEL;
+    state.moves = STEPS_PER_LEVEL + carriedMoves;
     state.stepsUsed = 0;
     state.hammers = Math.max(0, state.hammers);
     state.hammerMode = false;
@@ -399,6 +506,7 @@
     state.won = false;
     state.gameOver = false;
     state.ad = null;
+    state.usedStepRewardThisLevel = false;
     levelModal.hidden = true;
     adModal.hidden = true;
     syncHud();
@@ -416,19 +524,43 @@
     return (now - state.levelStartedAt - state.pausedTotal - currentPause) / 1000;
   }
 
+  function hammerRewardTier(level) {
+    if (level < HAMMER_FIRST_LEVEL) return null;
+    return Math.floor((level - HAMMER_FIRST_LEVEL) / HAMMER_REWARD_INTERVAL);
+  }
+
+  function canClaimHammer() {
+    const tier = hammerRewardTier(state.level);
+    return tier !== null && !state.claimedHammerTiers.has(tier);
+  }
+
   function syncHud() {
     levelText.textContent = String(state.level);
     timeText.textContent = formatTime(state.remainingSeconds);
     timeText.classList.toggle("danger", state.remainingSeconds <= 15);
     movesText.textContent = String(state.moves);
     movesText.classList.toggle("danger", state.moves <= 8);
+    const canReceiveHammer = canClaimHammer();
+    const showHammerButton = canReceiveHammer || state.hammers > 0;
+    hammerButton.hidden = !showHammerButton;
+    hammerButton.style.display = showHammerButton ? "inline-flex" : "none";
+    stepButton.hidden = true;
+    stepButton.style.display = "none";
+    if (actionbar) {
+      const hasVisibleAction = showHammerButton;
+      actionbar.hidden = !hasVisibleAction;
+      actionbar.style.display = hasVisibleAction ? "grid" : "none";
+      actionbar.style.gridTemplateColumns = "minmax(0, 1fr)";
+    }
     hammerButton.setAttribute("aria-pressed", state.hammerMode ? "true" : "false");
-    if (state.hammers > 0) {
+    if (canReceiveHammer) {
+      hammerText.textContent = "Nhận búa miễn phí";
+    } else if (state.hammers > 0) {
       hammerText.textContent = state.hammerMode ? `Chạm tường để đập (${state.hammers})` : `Búa ${state.hammers}`;
     } else {
-      hammerText.textContent = "Xem quảng cáo nhận búa";
+      hammerText.textContent = "Nhận búa miễn phí";
     }
-    stepText.textContent = `Xem quảng cáo +${AD_STEP_REWARD} bước`;
+    stepText.textContent = `Nhận +${AD_STEP_REWARD} bước`;
   }
 
   function updateTimer(now) {
@@ -498,7 +630,11 @@
     state.pathQueue = [];
     state.moving = null;
     pauseGame(performance.now());
-    showModal("Hết bước", `Ken cần thêm bước để đi tiếp màn ${state.level}.`, `Xem quảng cáo +${AD_STEP_REWARD} bước`, "steps");
+    if (state.usedStepRewardThisLevel) {
+      showModal("Hết bước", `Ken đã dùng hết bước cộng thêm ở màn ${state.level}.`, "Chơi lại", "retry");
+    } else {
+      showModal("Hết bước", `Ken cần thêm bước để đi tiếp màn ${state.level}.`, `Nhận +${AD_STEP_REWARD} bước`, "steps");
+    }
     syncHud();
   }
 
@@ -639,6 +775,7 @@
     if (!food) return;
 
     food.eaten = true;
+    playEffect("food");
     state.moves += FOOD_STEP_BONUS;
     collapseWallFromFood();
     showToast(`Ăn ngon! +${FOOD_STEP_BONUS} bước`);
@@ -657,6 +794,7 @@
     obstacle.spilled = true;
     obstacle.spillBorn = now;
     state.pathQueue = [];
+    playEffect("water");
     addWaterParticles(to);
     showToast("Xô nước đổ! Ken quay lại");
 
@@ -758,24 +896,34 @@
     }
   }
 
+  function grantReward(purpose) {
+    state.ad = null;
+    adModal.hidden = true;
+    levelModal.hidden = true;
+    resumeGame(performance.now());
+
+    if (purpose === "steps") {
+      state.moves += AD_STEP_REWARD;
+      state.gameOver = false;
+      state.modalMode = "next";
+      state.usedStepRewardThisLevel = true;
+      showToast(`Đã nhận ${AD_STEP_REWARD} bước`);
+    } else {
+      state.claimedHammerTiers.add(hammerRewardTier(state.level));
+      state.hammers += 1;
+      state.hammerMode = true;
+      showToast("Đã nhận 1 búa");
+    }
+
+    syncHud();
+  }
+
   function startAd(now, purpose) {
     if (state.won || state.ad) return;
+    if (purpose === "steps" && (!state.gameOver || state.modalMode !== "steps" || state.usedStepRewardThisLevel)) return;
+    if (purpose === "hammer" && !canClaimHammer()) return;
     if (state.gameOver && purpose !== "steps") return;
-    pauseGame(now);
-    state.ad = { started: now, complete: false, purpose };
-    adProgress.style.width = "0%";
-    adButton.disabled = true;
-    adButton.textContent = "Đang xem...";
-    adIcon.className = purpose === "steps" ? "ad-icon step-icon" : "ad-icon hammer-large";
-    adIcon.textContent = purpose === "steps" ? `+${AD_STEP_REWARD}` : "";
-    adTitle.textContent = purpose === "steps" ? "Thêm bước" : "Nhận búa";
-    adText.textContent =
-      purpose === "steps"
-        ? `Xem quảng cáo ngắn để nhận thêm ${AD_STEP_REWARD} bước.`
-        : "Xem quảng cáo ngắn để nhận 1 búa phá tường.";
-    levelModal.hidden = true;
-    adModal.hidden = false;
-    syncHud();
+    grantReward(purpose);
   }
 
   function updateAd(now) {
@@ -792,29 +940,16 @@
 
   function grantAdReward() {
     if (!state.ad || !state.ad.complete) return;
-    const purpose = state.ad.purpose;
-    state.ad = null;
-    adModal.hidden = true;
-    resumeGame(performance.now());
-
-    if (purpose === "steps") {
-      state.moves += AD_STEP_REWARD;
-      state.gameOver = false;
-      state.modalMode = "next";
-      showToast(`Đã nhận ${AD_STEP_REWARD} bước`);
-    } else {
-      state.hammers += 1;
-      state.hammerMode = true;
-      showToast("Đã nhận 1 búa");
-    }
-
-    syncHud();
+    grantReward(state.ad.purpose);
   }
 
   function toggleHammer() {
     if (state.won || state.gameOver) return;
-    if (state.hammers <= 0) {
+    if (canClaimHammer()) {
       startAd(performance.now(), "hammer");
+      return;
+    }
+    if (state.hammers <= 0) {
       return;
     }
 
@@ -847,6 +982,7 @@
     }
 
     if (collapseWall({ x: from.x, y: from.y, dir }, "Búa đã mở đường")) {
+      playEffect("hammer");
       state.hammers -= 1;
       state.hammerMode = state.hammers > 0;
       syncHud();
@@ -1348,6 +1484,7 @@
 
   function setupControls() {
     window.addEventListener("pointerdown", primeAudio, { once: true });
+    window.addEventListener("touchstart", primeAudio, { once: true, passive: true });
     window.addEventListener("keydown", primeAudio, { once: true });
 
     window.addEventListener("keydown", (event) => {
